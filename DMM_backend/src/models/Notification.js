@@ -3,6 +3,7 @@ import { NOTIFICATION_TYPES } from '../config/constants.js';
 
 const notificationSchema = new mongoose.Schema(
   {
+    organization: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization', index: true },
     recipient: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     type: { type: String, enum: Object.values(NOTIFICATION_TYPES), required: true },
     title: { type: String, required: true },

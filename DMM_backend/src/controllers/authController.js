@@ -13,6 +13,8 @@ const sanitize = (user) => ({
   avatar: user.avatar,
   jobTitle: user.jobTitle,
   settings: user.settings,
+  // Populated org doc (CEO/USER) or null (ADMIN)
+  organization: user.organization || null,
 });
 
 // @route GET /api/auth/setup-status
@@ -55,7 +57,9 @@ export const login = asyncHandler(async (req, res) => {
     res.status(400);
     throw new Error('Email and password are required');
   }
-  const user = await User.findOne({ email: email.toLowerCase() }).select('+password');
+  const user = await User.findOne({ email: email.toLowerCase() })
+    .select('+password')
+    .populate('organization', 'name slug logo color isActive');
   if (!user || !(await user.matchPassword(password))) {
     res.status(401);
     throw new Error('Invalid email or password');
@@ -63,6 +67,17 @@ export const login = asyncHandler(async (req, res) => {
   if (!user.isActive) {
     res.status(403);
     throw new Error('Your account has been deactivated. Contact your administrator.');
+  }
+  // CEO/USER must belong to an active organization to use the product app.
+  if (user.role !== 'ADMIN') {
+    if (!user.organization) {
+      res.status(403);
+      throw new Error('Your account is not assigned to an organization. Contact your administrator.');
+    }
+    if (user.organization.isActive === false) {
+      res.status(403);
+      throw new Error('Your organization has been deactivated. Contact your administrator.');
+    }
   }
   res.json({ success: true, user: sanitize(user), token: generateToken(user._id) });
 });

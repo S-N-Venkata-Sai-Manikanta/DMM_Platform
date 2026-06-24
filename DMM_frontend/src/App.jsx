@@ -17,6 +17,8 @@ import Assets from './pages/Assets.jsx';
 import Approvals from './pages/Approvals.jsx';
 import ApprovalDetail from './pages/ApprovalDetail.jsx';
 import ApprovalAnalytics from './pages/ApprovalAnalytics.jsx';
+import Calendar from './pages/Calendar.jsx';
+import SocialAnalytics from './pages/SocialAnalytics.jsx';
 import Reports from './pages/Reports.jsx';
 import Notifications from './pages/Notifications.jsx';
 import Settings from './pages/Settings.jsx';
@@ -68,6 +70,8 @@ export default function App() {
         <Route path="/assets" element={<Assets />} />
         <Route path="/approvals" element={<Approvals />} />
         <Route path="/approvals/:id" element={<ApprovalDetail />} />
+        <Route path="/calendar" element={<Calendar />} />
+        <Route path="/social-analytics" element={<SocialAnalytics />} />
         <Route path="/approval-analytics" element={<ApprovalAnalytics />} />
         <Route path="/reports" element={<Reports />} />
         <Route path="/notifications" element={<Notifications />} />

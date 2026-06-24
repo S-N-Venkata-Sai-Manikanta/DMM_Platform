@@ -6,6 +6,7 @@ import { uploadBuffer, deleteFile } from '../config/storage.js';
 import { logActivity } from '../utils/logActivity.js';
 import { createNotification } from '../utils/notify.js';
 import User from '../models/User.js';
+import { requireOrgId } from '../utils/org.js';
 import { APPROVAL_STATUS, ACTIVITY_ACTIONS, NOTIFICATION_TYPES, ROLES } from '../config/constants.js';
 
 const parseHashtags = (raw) => {
@@ -17,12 +18,13 @@ const parseHashtags = (raw) => {
     .filter(Boolean);
 };
 
+// Notify only the CEOs of the request's own organization.
 const notifyCEOs = async (type, title, message, request) => {
-  const ceos = await User.find({ role: ROLES.CEO, isActive: true }).select('_id');
+  const ceos = await User.find({ role: ROLES.CEO, isActive: true, organization: request.organization }).select('_id');
   await Promise.all(
     ceos.map((c) =>
       createNotification({
-        recipient: c._id, type, title, message,
+        recipient: c._id, organization: request.organization, type, title, message,
         link: `/approvals/${request._id}`, relatedRequest: request._id,
       })
     )
@@ -44,7 +46,7 @@ const attachImages = async (requests) => {
 // @route GET /api/approvals  — CEO sees all, USER sees own. Supports filters.
 export const getApprovals = asyncHandler(async (req, res) => {
   const { status, platform, search, user, from, to, page = 1, limit = 12 } = req.query;
-  const query = {};
+  const query = { organization: requireOrgId(req, res) };
   const privileged = [ROLES.ADMIN, ROLES.CEO].includes(req.user.role);
   if (!privileged) query.createdBy = req.user._id;
   else if (user) query.createdBy = user;
@@ -78,7 +80,7 @@ export const getApproval = asyncHandler(async (req, res) => {
     .populate('postedBy', 'name')
     .populate('reviews.reviewedBy', 'name avatar')
     .lean();
-  if (!reqDoc) { res.status(404); throw new Error('Request not found'); }
+  if (!reqDoc || String(reqDoc.organization) !== String(requireOrgId(req, res))) { res.status(404); throw new Error('Request not found'); }
   const privileged = [ROLES.ADMIN, ROLES.CEO].includes(req.user.role);
   if (!privileged && String(reqDoc.createdBy._id) !== String(req.user._id)) {
     res.status(403); throw new Error('Not allowed to view this request');
@@ -92,10 +94,12 @@ export const getApproval = asyncHandler(async (req, res) => {
 
 // @route POST /api/approvals  — create new request (status PENDING)
 export const createApproval = asyncHandler(async (req, res) => {
+  const orgId = requireOrgId(req, res);
   const { title, platform, caption, description, hashtags, order } = req.body;
   if (!title || !platform) { res.status(400); throw new Error('Title and platform are required'); }
 
   const request = await ApprovalRequest.create({
+    organization: orgId,
     title, platform, caption, description,
     hashtags: parseHashtags(hashtags),
     status: APPROVAL_STATUS.PENDING,
@@ -116,7 +120,7 @@ export const createApproval = asyncHandler(async (req, res) => {
   request.imageCount = imageDocs.length;
   await request.save();
 
-  logActivity({ user: req.user._id, action: ACTIVITY_ACTIONS.APPROVAL_SUBMISSION, description: `Submitted approval request "${title}"`, entityType: 'ApprovalRequest', entityId: request._id });
+  logActivity({ user: req.user._id, organization: orgId, action: ACTIVITY_ACTIONS.APPROVAL_SUBMISSION, description: `Submitted approval request "${title}"`, entityType: 'ApprovalRequest', entityId: request._id });
   await notifyCEOs(NOTIFICATION_TYPES.NEW_REQUEST, 'New approval request', `${req.user.name} submitted "${title}"`, request);
 
   const images = await ApprovalImage.find({ request: request._id }).sort({ order: 1 }).lean();
@@ -126,16 +130,16 @@ export const createApproval = asyncHandler(async (req, res) => {
 // @route PUT /api/approvals/:id/approve  (CEO)
 export const approveRequest = asyncHandler(async (req, res) => {
   const request = await ApprovalRequest.findById(req.params.id);
-  if (!request) { res.status(404); throw new Error('Request not found'); }
+  if (!request || String(request.organization) !== String(requireOrgId(req, res))) { res.status(404); throw new Error('Request not found'); }
 
   request.status = APPROVAL_STATUS.APPROVED;
   request.approvedAt = new Date();
   request.approvedBy = req.user._id;
   await request.save();
 
-  logActivity({ user: req.user._id, action: ACTIVITY_ACTIONS.APPROVAL_APPROVED, description: `Approved "${request.title}"`, entityType: 'ApprovalRequest', entityId: request._id });
+  logActivity({ user: req.user._id, organization: request.organization, action: ACTIVITY_ACTIONS.APPROVAL_APPROVED, description: `Approved "${request.title}"`, entityType: 'ApprovalRequest', entityId: request._id });
   await createNotification({
-    recipient: request.createdBy, type: NOTIFICATION_TYPES.CONTENT_APPROVED,
+    recipient: request.createdBy, organization: request.organization, type: NOTIFICATION_TYPES.CONTENT_APPROVED,
     title: 'Content approved', message: `Your request "${request.title}" was approved`,
     link: `/approvals/${request._id}`, relatedRequest: request._id,
   });
@@ -145,7 +149,7 @@ export const approveRequest = asyncHandler(async (req, res) => {
 // @route PUT /api/approvals/:id/reject  (CEO) — body: { feedbackPoints: [] }
 export const rejectRequest = asyncHandler(async (req, res) => {
   const request = await ApprovalRequest.findById(req.params.id);
-  if (!request) { res.status(404); throw new Error('Request not found'); }
+  if (!request || String(request.organization) !== String(requireOrgId(req, res))) { res.status(404); throw new Error('Request not found'); }
 
   const feedbackPoints = (req.body.feedbackPoints || []).map((p) => String(p).trim()).filter(Boolean);
   if (feedbackPoints.length === 0) { res.status(400); throw new Error('At least one feedback point is required'); }
@@ -161,9 +165,9 @@ export const rejectRequest = asyncHandler(async (req, res) => {
     feedbackPoints.map((text) => ({ request: request._id, text, author: req.user._id, reviewRound }))
   );
 
-  logActivity({ user: req.user._id, action: ACTIVITY_ACTIONS.APPROVAL_REJECTED, description: `Rejected "${request.title}"`, entityType: 'ApprovalRequest', entityId: request._id });
+  logActivity({ user: req.user._id, organization: request.organization, action: ACTIVITY_ACTIONS.APPROVAL_REJECTED, description: `Rejected "${request.title}"`, entityType: 'ApprovalRequest', entityId: request._id });
   await createNotification({
-    recipient: request.createdBy, type: NOTIFICATION_TYPES.CONTENT_REJECTED,
+    recipient: request.createdBy, organization: request.organization, type: NOTIFICATION_TYPES.CONTENT_REJECTED,
     title: 'Content needs revision', message: `Your request "${request.title}" was rejected with ${feedbackPoints.length} note(s)`,
     link: `/approvals/${request._id}`, relatedRequest: request._id,
   });
@@ -173,7 +177,7 @@ export const rejectRequest = asyncHandler(async (req, res) => {
 // @route PUT /api/approvals/:id/resubmit  (owner) — update content + images, status RESUBMITTED
 export const resubmitRequest = asyncHandler(async (req, res) => {
   const request = await ApprovalRequest.findById(req.params.id);
-  if (!request) { res.status(404); throw new Error('Request not found'); }
+  if (!request || String(request.organization) !== String(requireOrgId(req, res))) { res.status(404); throw new Error('Request not found'); }
   if (String(request.createdBy) !== String(req.user._id)) { res.status(403); throw new Error('Not allowed'); }
   if (request.status !== APPROVAL_STATUS.REJECTED) { res.status(400); throw new Error('Only rejected requests can be resubmitted'); }
 
@@ -212,7 +216,7 @@ export const resubmitRequest = asyncHandler(async (req, res) => {
   request.resubmitCount += 1;
   await request.save();
 
-  logActivity({ user: req.user._id, action: ACTIVITY_ACTIONS.APPROVAL_RESUBMITTED, description: `Resubmitted "${request.title}"`, entityType: 'ApprovalRequest', entityId: request._id });
+  logActivity({ user: req.user._id, organization: request.organization, action: ACTIVITY_ACTIONS.APPROVAL_RESUBMITTED, description: `Resubmitted "${request.title}"`, entityType: 'ApprovalRequest', entityId: request._id });
   await notifyCEOs(NOTIFICATION_TYPES.CONTENT_RESUBMITTED, 'Content resubmitted', `${req.user.name} resubmitted "${request.title}"`, request);
 
   res.json({ success: true, request });
@@ -221,7 +225,7 @@ export const resubmitRequest = asyncHandler(async (req, res) => {
 // @route PUT /api/approvals/:id/posted  (owner) — mark as posted
 export const markPosted = asyncHandler(async (req, res) => {
   const request = await ApprovalRequest.findById(req.params.id);
-  if (!request) { res.status(404); throw new Error('Request not found'); }
+  if (!request || String(request.organization) !== String(requireOrgId(req, res))) { res.status(404); throw new Error('Request not found'); }
   if (String(request.createdBy) !== String(req.user._id)) { res.status(403); throw new Error('Not allowed'); }
   if (request.status !== APPROVAL_STATUS.APPROVED) { res.status(400); throw new Error('Only approved content can be marked as posted'); }
 
@@ -230,7 +234,7 @@ export const markPosted = asyncHandler(async (req, res) => {
   request.postedBy = req.user._id;
   await request.save();
 
-  logActivity({ user: req.user._id, action: ACTIVITY_ACTIONS.POST_COMPLETION, description: `Marked "${request.title}" as posted`, entityType: 'ApprovalRequest', entityId: request._id });
+  logActivity({ user: req.user._id, organization: request.organization, action: ACTIVITY_ACTIONS.POST_COMPLETION, description: `Marked "${request.title}" as posted`, entityType: 'ApprovalRequest', entityId: request._id });
   await notifyCEOs(NOTIFICATION_TYPES.CONTENT_POSTED, 'Content posted', `${req.user.name} posted "${request.title}" on ${request.platform}`, request);
 
   res.json({ success: true, request });
@@ -239,7 +243,7 @@ export const markPosted = asyncHandler(async (req, res) => {
 // @route DELETE /api/approvals/:id  (owner or CEO)
 export const deleteApproval = asyncHandler(async (req, res) => {
   const request = await ApprovalRequest.findById(req.params.id);
-  if (!request) { res.status(404); throw new Error('Request not found'); }
+  if (!request || String(request.organization) !== String(requireOrgId(req, res))) { res.status(404); throw new Error('Request not found'); }
   if (String(request.createdBy) !== String(req.user._id) && req.user.role !== ROLES.CEO) {
     res.status(403); throw new Error('Not allowed');
   }

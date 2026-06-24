@@ -7,6 +7,16 @@ export const authApi = {
   me: () => api.get('/auth/me').then((r) => r.data),
 };
 
+export const organizationApi = {
+  list: (params) => api.get('/organizations', { params }).then((r) => r.data),
+  get: (id) => api.get(`/organizations/${id}`).then((r) => r.data),
+  create: (formData) =>
+    api.post('/organizations', formData, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data),
+  update: (id, formData) =>
+    api.put(`/organizations/${id}`, formData, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data),
+  remove: (id) => api.delete(`/organizations/${id}`).then((r) => r.data),
+};
+
 export const userApi = {
   list: (params) => api.get('/users', { params }).then((r) => r.data),
   get: (id) => api.get(`/users/${id}`).then((r) => r.data),
@@ -14,22 +24,22 @@ export const userApi = {
   update: (id, data) => api.put(`/users/${id}`, data).then((r) => r.data),
   remove: (id) => api.delete(`/users/${id}`).then((r) => r.data),
   resetPassword: (id, password) => api.put(`/users/${id}/reset-password`, { password }).then((r) => r.data),
-  // self
   updateProfile: (formData) =>
     api.put('/users/profile', formData, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data),
   changePassword: (data) => api.put('/users/password', data).then((r) => r.data),
-  updateSettings: (data) => api.put('/users/settings', data).then((r) => r.data),
 };
 
+// Org-scoped calls — the active org is attached as x-organization-id by the client.
 export const analyticsApi = {
-  get: () => api.get('/analytics').then((r) => r.data),
-  history: (platform) => api.get(`/analytics/${platform}/history`).then((r) => r.data),
+  get: (organizationId) => api.get('/analytics', { params: { organizationId } }).then((r) => r.data),
+  report: (platform, organizationId) => api.get(`/analytics/${platform}/report`, { params: { organizationId } }).then((r) => r.data),
+  compare: (platform, metric) => api.get('/analytics/compare', { params: { platform, metric } }).then((r) => r.data),
   record: (data) => api.post('/analytics', data).then((r) => r.data),
 };
 
-export const dashboardApi = {
-  stats: () => api.get('/dashboard/stats').then((r) => r.data),
-  activity: () => api.get('/dashboard/activity').then((r) => r.data),
+export const calendarApi = {
+  month: (organizationId, month) => api.get('/calendar', { params: { organizationId, month } }).then((r) => r.data),
+  day: (organizationId, date) => api.get('/calendar/day', { params: { organizationId, date } }).then((r) => r.data),
 };
 
 export const activityApi = {

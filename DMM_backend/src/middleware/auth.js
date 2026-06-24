@@ -15,7 +15,7 @@ export const protect = asyncHandler(async (req, res, next) => {
   }
   try {
     const decoded = verifyToken(token);
-    const user = await User.findById(decoded.id);
+    const user = await User.findById(decoded.id).populate('organization', 'name slug logo color isActive');
     if (!user || !user.isActive) {
       res.status(401);
       throw new Error('Not authorized, user not found');

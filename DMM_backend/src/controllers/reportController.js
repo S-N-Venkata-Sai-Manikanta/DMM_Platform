@@ -1,14 +1,17 @@
 import asyncHandler from 'express-async-handler';
+import mongoose from 'mongoose';
 import ExcelJS from 'exceljs';
 import PDFDocument from 'pdfkit';
 import ApprovalRequest from '../models/ApprovalRequest.js';
 import Template from '../models/Template.js';
 import Asset from '../models/Asset.js';
 import ActivityLog from '../models/ActivityLog.js';
+import { requireOrgId } from '../utils/org.js';
 import { ROLES } from '../config/constants.js';
 
-// Build the row data for a given report type.
-const buildRows = async (type, scope) => {
+// Build the row data for a given report type. `scope` always includes organization
+// (and createdBy for non-privileged users); `orgId` scopes library reports.
+const buildRows = async (type, scope, orgId) => {
   switch (type) {
     case 'approval': {
       const docs = await ApprovalRequest.find(scope).populate('createdBy', 'name').sort({ createdAt: -1 });
@@ -29,21 +32,22 @@ const buildRows = async (type, scope) => {
       };
     }
     case 'template': {
-      const docs = await Template.find().populate('uploadedBy', 'name').sort({ createdAt: -1 });
+      const docs = await Template.find({ organization: orgId }).populate('uploadedBy', 'name').sort({ createdAt: -1 });
       return {
         columns: ['Name', 'Category', 'Type', 'Downloads', 'Uploaded By', 'Created'],
         rows: docs.map((d) => [d.name, d.category, d.fileType, d.downloads, d.uploadedBy?.name || '-', d.createdAt.toISOString().slice(0, 10)]),
       };
     }
     case 'asset': {
-      const docs = await Asset.find().populate('uploadedBy', 'name').sort({ createdAt: -1 });
+      const docs = await Asset.find({ organization: orgId }).populate('uploadedBy', 'name').sort({ createdAt: -1 });
       return {
         columns: ['Name', 'Category', 'Type', 'Downloads', 'Uploaded By', 'Created'],
         rows: docs.map((d) => [d.name, d.category, d.fileType, d.downloads, d.uploadedBy?.name || '-', d.createdAt.toISOString().slice(0, 10)]),
       };
     }
     case 'activity': {
-      const docs = await ActivityLog.find(scope.createdBy ? { user: scope.createdBy } : {}).populate('user', 'name').sort({ createdAt: -1 }).limit(500);
+      const actQuery = { organization: orgId, ...(scope.createdBy ? { user: scope.createdBy } : {}) };
+      const docs = await ActivityLog.find(actQuery).populate('user', 'name').sort({ createdAt: -1 }).limit(500);
       return {
         columns: ['User', 'Action', 'Description', 'Timestamp'],
         rows: docs.map((d) => [d.user?.name || '-', d.action, d.description, d.createdAt.toISOString().slice(0, 16).replace('T', ' ')]),
@@ -66,8 +70,10 @@ const titleFor = {
 export const exportReport = asyncHandler(async (req, res) => {
   const { type } = req.params;
   const format = (req.query.format || 'excel').toLowerCase();
-  const scope = [ROLES.ADMIN, ROLES.CEO].includes(req.user.role) ? {} : { createdBy: req.user._id };
-  const { columns, rows } = await buildRows(type, scope);
+  const orgId = requireOrgId(req, res);
+  const privileged = [ROLES.ADMIN, ROLES.CEO].includes(req.user.role);
+  const scope = privileged ? { organization: orgId } : { organization: orgId, createdBy: req.user._id };
+  const { columns, rows } = await buildRows(type, scope, orgId);
   const title = titleFor[type] || 'Report';
 
   if (format === 'pdf') {
@@ -116,9 +122,14 @@ export const exportReport = asyncHandler(async (req, res) => {
 
 // @route GET /api/reports/summary/approval-analytics — KPI + chart data for analytics page
 export const approvalAnalytics = asyncHandler(async (req, res) => {
-  const scope = [ROLES.ADMIN, ROLES.CEO].includes(req.user.role) ? {} : { createdBy: req.user._id };
+  const orgId = requireOrgId(req, res);
+  const privileged = [ROLES.ADMIN, ROLES.CEO].includes(req.user.role);
+  // find() scope (string ok) and aggregate $match scope (needs ObjectId)
+  const scope = privileged ? { organization: orgId } : { organization: orgId, createdBy: req.user._id };
+  const aggScope = { ...scope, organization: new mongoose.Types.ObjectId(orgId) };
+  if (scope.createdBy) aggScope.createdBy = new mongoose.Types.ObjectId(req.user._id);
   const agg = await ApprovalRequest.aggregate([
-    { $match: scope },
+    { $match: aggScope },
     { $group: { _id: '$status', count: { $sum: 1 } } },
   ]);
   const by = (s) => agg.find((x) => x._id === s)?.count || 0;
@@ -128,7 +139,7 @@ export const approvalAnalytics = asyncHandler(async (req, res) => {
 
   // Per-user performance (CEO view)
   const userPerf = await ApprovalRequest.aggregate([
-    { $match: scope },
+    { $match: aggScope },
     { $group: { _id: '$createdBy', total: { $sum: 1 }, approved: { $sum: { $cond: [{ $in: ['$status', ['APPROVED', 'POSTED']] }, 1, 0] } } } },
     { $lookup: { from: 'users', localField: '_id', foreignField: '_id', as: 'user' } },
     { $unwind: '$user' },

@@ -15,6 +15,8 @@ const userSchema = new mongoose.Schema(
     },
     password: { type: String, required: true, minlength: 6, select: false },
     role: { type: String, enum: Object.values(ROLES), default: ROLES.USER },
+    // CEO and USER belong to one organization. ADMIN is global (organization = null).
+    organization: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization', default: null, index: true },
     avatar: { type: String, default: '' },
     avatarPublicId: { type: String, default: '' },
     jobTitle: { type: String, default: '' },

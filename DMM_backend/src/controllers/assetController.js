@@ -2,14 +2,15 @@ import asyncHandler from 'express-async-handler';
 import Asset from '../models/Asset.js';
 import { uploadBuffer, deleteFile } from '../config/storage.js';
 import { logActivity } from '../utils/logActivity.js';
+import { requireOrgId } from '../utils/org.js';
 import { ACTIVITY_ACTIONS } from '../config/constants.js';
 
 const extOf = (name = '') => (name.split('.').pop() || '').toUpperCase();
 
-// @route GET /api/assets
+// @route GET /api/assets (org-scoped)
 export const getAssets = asyncHandler(async (req, res) => {
   const { search, category, page = 1, limit = 12 } = req.query;
-  const query = {};
+  const query = { organization: requireOrgId(req, res) };
   if (category && category !== 'All') query.category = category;
   if (search) query.$or = [
     { name: { $regex: search, $options: 'i' } },
@@ -32,6 +33,7 @@ export const getAsset = asyncHandler(async (req, res) => {
 
 // @route POST /api/assets
 export const createAsset = asyncHandler(async (req, res) => {
+  const orgId = requireOrgId(req, res);
   const { name, description, category } = req.body;
   if (!name || !category) { res.status(400); throw new Error('Name and category are required'); }
   if (!req.files?.file?.[0]) { res.status(400); throw new Error('Asset file is required'); }
@@ -49,20 +51,21 @@ export const createAsset = asyncHandler(async (req, res) => {
   }
 
   const asset = await Asset.create({
+    organization: orgId,
     name, description, category,
     fileUrl: url, filePublicId: publicId, fileName: file.originalname,
     fileType: extOf(file.originalname), fileSize: file.size,
     previewImage, previewPublicId,
     uploadedBy: req.user._id,
   });
-  logActivity({ user: req.user._id, action: ACTIVITY_ACTIONS.ASSET_UPLOAD, description: `Uploaded asset "${name}"`, entityType: 'Asset', entityId: asset._id });
+  logActivity({ user: req.user._id, organization: orgId, action: ACTIVITY_ACTIONS.ASSET_UPLOAD, description: `Uploaded asset "${name}"`, entityType: 'Asset', entityId: asset._id });
   res.status(201).json({ success: true, asset });
 });
 
 // @route PUT /api/assets/:id
 export const updateAsset = asyncHandler(async (req, res) => {
   const asset = await Asset.findById(req.params.id);
-  if (!asset) { res.status(404); throw new Error('Asset not found'); }
+  if (!asset || String(asset.organization) !== String(requireOrgId(req, res))) { res.status(404); throw new Error('Asset not found'); }
   if (String(asset.uploadedBy) !== String(req.user._id) && req.user.role !== 'CEO') {
     res.status(403); throw new Error('Not allowed to edit this asset');
   }
@@ -91,7 +94,7 @@ export const updateAsset = asyncHandler(async (req, res) => {
 // @route DELETE /api/assets/:id
 export const deleteAsset = asyncHandler(async (req, res) => {
   const asset = await Asset.findById(req.params.id);
-  if (!asset) { res.status(404); throw new Error('Asset not found'); }
+  if (!asset || String(asset.organization) !== String(requireOrgId(req, res))) { res.status(404); throw new Error('Asset not found'); }
   if (String(asset.uploadedBy) !== String(req.user._id) && req.user.role !== 'CEO') {
     res.status(403); throw new Error('Not allowed to delete this asset');
   }

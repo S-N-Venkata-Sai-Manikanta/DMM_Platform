@@ -28,10 +28,11 @@ export const userApi = {
 };
 
 // ---- Analytics (social metrics management) ----
+// Social analytics — auto-scoped to the logged-in user's organization.
 export const analyticsApi = {
   get: () => api.get('/analytics').then((r) => r.data),
+  report: (platform) => api.get(`/analytics/${platform}/report`).then((r) => r.data),
   history: (platform) => api.get(`/analytics/${platform}/history`).then((r) => r.data),
-  record: (data) => api.post('/analytics', data).then((r) => r.data),
 };
 
 // ---- Dashboard ----
@@ -46,6 +47,12 @@ export const dashboardApi = {
 // ---- Global Search ----
 export const searchApi = {
   query: (q) => api.get('/search', { params: { q } }).then((r) => r.data),
+};
+
+// ---- Calendar (posting calendar — auto-scoped to the user's org) ----
+export const calendarApi = {
+  month: (month) => api.get('/calendar', { params: { month } }).then((r) => r.data),
+  day: (date) => api.get('/calendar/day', { params: { date } }).then((r) => r.data),
 };
 
 // ---- Templates ----

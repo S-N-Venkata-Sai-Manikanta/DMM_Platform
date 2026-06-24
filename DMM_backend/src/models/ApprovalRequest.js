@@ -18,6 +18,7 @@ const reviewSchema = new mongoose.Schema(
 
 const approvalRequestSchema = new mongoose.Schema(
   {
+    organization: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization', required: true, index: true },
     title: { type: String, required: true, trim: true },
     platform: { type: String, enum: PLATFORMS, required: true },
     caption: { type: String, default: '' },

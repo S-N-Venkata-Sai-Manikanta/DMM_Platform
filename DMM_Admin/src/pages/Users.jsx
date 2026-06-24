@@ -4,7 +4,7 @@ import toast from 'react-hot-toast';
 import {
   UserPlus, Search, Pencil, KeyRound, Trash2, Users as UsersIcon, ShieldCheck, Crown, User as UserIcon, MoreVertical, Power,
 } from 'lucide-react';
-import { userApi } from '../api/endpoints.js';
+import { userApi, organizationApi } from '../api/endpoints.js';
 import { useAuthStore } from '../store/authStore.js';
 import PageHeader from '../components/layout/PageHeader.jsx';
 import { Button } from '../components/ui/Button.jsx';
@@ -18,12 +18,14 @@ const ROLE_ICON = { ADMIN: ShieldCheck, CEO: Crown, USER: UserIcon };
 export default function Users() {
   const qc = useQueryClient();
   const { user: me } = useAuthStore();
-  const [filters, setFilters] = useState({ search: '', role: 'All' });
+  const [filters, setFilters] = useState({ search: '', role: 'All', organization: 'All' });
   const [modal, setModal] = useState(null);
   const [menuFor, setMenuFor] = useState(null);
 
   const { data, isLoading } = useQuery({ queryKey: ['users', filters], queryFn: () => userApi.list(filters) });
   const users = data?.users || [];
+  const { data: orgData } = useQuery({ queryKey: ['organizations', 'all'], queryFn: () => organizationApi.list() });
+  const orgs = orgData?.organizations || [];
   const counts = users.reduce((acc, u) => { acc[u.role] = (acc[u.role] || 0) + 1; return acc; }, {});
 
   const removeMut = useMutation({
@@ -63,9 +65,13 @@ export default function Users() {
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
           <Input placeholder="Search by name or email..." className="pl-9" value={filters.search} onChange={(e) => setFilters({ ...filters, search: e.target.value })} />
         </div>
-        <Select className="sm:w-48" value={filters.role} onChange={(e) => setFilters({ ...filters, role: e.target.value })}>
+        <Select className="sm:w-44" value={filters.role} onChange={(e) => setFilters({ ...filters, role: e.target.value })}>
           <option value="All">All Roles</option>
           {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
+        </Select>
+        <Select className="sm:w-52" value={filters.organization} onChange={(e) => setFilters({ ...filters, organization: e.target.value })}>
+          <option value="All">All Organizations</option>
+          {orgs.map((o) => <option key={o._id} value={o._id}>{o.name}</option>)}
         </Select>
       </div>
 
@@ -82,6 +88,7 @@ export default function Users() {
                 <tr className="border-b border-slate-100 dark:border-slate-800 text-left text-xs uppercase text-slate-400">
                   <th className="px-5 py-3 font-semibold">User</th>
                   <th className="px-5 py-3 font-semibold">Role</th>
+                  <th className="px-5 py-3 font-semibold">Organization</th>
                   <th className="px-5 py-3 font-semibold">Status</th>
                   <th className="px-5 py-3 font-semibold">Joined</th>
                   <th className="px-5 py-3 font-semibold text-right">Actions</th>
@@ -104,6 +111,14 @@ export default function Users() {
                       </td>
                       <td className="px-5 py-3">
                         <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold ${ROLE_STYLES[u.role]}`}><RoleIcon className="h-3 w-3" />{u.role}</span>
+                      </td>
+                      <td className="px-5 py-3">
+                        {u.organization ? (
+                          <span className="inline-flex items-center gap-1.5 text-slate-600 dark:text-slate-300">
+                            <span className="h-2 w-2 rounded-full" style={{ background: u.organization.color || '#6366f1' }} />
+                            {u.organization.name}
+                          </span>
+                        ) : <span className="text-xs text-slate-400">— Global —</span>}
                       </td>
                       <td className="px-5 py-3">
                         <Badge className={u.isActive ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400' : 'bg-slate-100 text-slate-500 dark:bg-slate-800'}>{u.isActive ? 'Active' : 'Inactive'}</Badge>
@@ -151,15 +166,24 @@ function UserFormModal({ editUser, onClose, onSaved }) {
   const [form, setForm] = useState({
     name: editUser?.name || '', email: editUser?.email || '', password: '',
     role: editUser?.role || 'USER', jobTitle: editUser?.jobTitle || '',
+    organization: editUser?.organization?._id || editUser?.organization || '',
   });
   const [loading, setLoading] = useState(false);
+  const { data: orgData } = useQuery({ queryKey: ['organizations', 'all'], queryFn: () => organizationApi.list() });
+  const orgs = orgData?.organizations || [];
+  const needsOrg = form.role === 'CEO' || form.role === 'USER';
 
   const submit = async (e) => {
     e.preventDefault();
+    if (needsOrg && !form.organization) { toast.error('Select an organization for this user'); return; }
     setLoading(true);
     try {
-      if (editUser) { await userApi.update(editUser._id, { name: form.name, role: form.role, jobTitle: form.jobTitle }); toast.success('User updated'); }
-      else { await userApi.create(form); toast.success('User created'); }
+      const payload = {
+        name: form.name, role: form.role, jobTitle: form.jobTitle,
+        organization: needsOrg ? form.organization : null,
+      };
+      if (editUser) { await userApi.update(editUser._id, payload); toast.success('User updated'); }
+      else { await userApi.create({ ...payload, email: form.email, password: form.password }); toast.success('User created'); }
       onSaved();
     } catch (err) { toast.error(err.response?.data?.message || 'Save failed'); }
     finally { setLoading(false); }
@@ -177,6 +201,14 @@ function UserFormModal({ editUser, onClose, onSaved }) {
           </Select>
           <Input label="Job title" value={form.jobTitle} onChange={(e) => setForm({ ...form, jobTitle: e.target.value })} placeholder="e.g. Manager" />
         </div>
+        {needsOrg ? (
+          <Select label="Organization" value={form.organization} onChange={(e) => setForm({ ...form, organization: e.target.value })}>
+            <option value="">Select an organization…</option>
+            {orgs.map((o) => <option key={o._id} value={o._id}>{o.name}</option>)}
+          </Select>
+        ) : (
+          <p className="rounded-lg bg-violet-50 dark:bg-violet-500/10 px-3 py-2 text-xs text-violet-700 dark:text-violet-300">Admins are global and not tied to a single organization.</p>
+        )}
         {editUser && <p className="text-xs text-slate-400">Email can't be changed. Use "Reset password" to set a new password.</p>}
         <div className="flex justify-end gap-2 pt-2">
           <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>

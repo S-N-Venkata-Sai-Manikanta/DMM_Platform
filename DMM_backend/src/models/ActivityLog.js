@@ -3,6 +3,7 @@ import { ACTIVITY_ACTIONS } from '../config/constants.js';
 
 const activityLogSchema = new mongoose.Schema(
   {
+    organization: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization', index: true },
     user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     action: { type: String, enum: Object.values(ACTIVITY_ACTIONS), required: true },
     description: { type: String, default: '' },

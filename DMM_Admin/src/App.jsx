@@ -10,8 +10,10 @@ import ProtectedRoute from './components/layout/ProtectedRoute.jsx';
 import Setup from './pages/Setup.jsx';
 import Login from './pages/Login.jsx';
 import Overview from './pages/Overview.jsx';
+import Organizations from './pages/Organizations.jsx';
 import Users from './pages/Users.jsx';
 import Analytics from './pages/Analytics.jsx';
+import Calendar from './pages/Calendar.jsx';
 import ActivityLogs from './pages/ActivityLogs.jsx';
 import Settings from './pages/Settings.jsx';
 
@@ -60,8 +62,10 @@ export default function App() {
       <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route path="/dashboard" element={<Overview />} />
+        <Route path="/organizations" element={<Organizations />} />
         <Route path="/users" element={<Users />} />
         <Route path="/analytics" element={<Analytics />} />
+        <Route path="/calendar" element={<Calendar />} />
         <Route path="/activity" element={<ActivityLogs />} />
         <Route path="/settings" element={<Settings />} />
       </Route>

@@ -1,12 +1,14 @@
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Users, Activity, BarChart3, Settings, X, ShieldCheck } from 'lucide-react';
+import { LayoutDashboard, Building2, Users, Activity, BarChart3, CalendarDays, Settings, X, ShieldCheck } from 'lucide-react';
 import { cn } from '../../lib/utils.js';
 import { useAuthStore } from '../../store/authStore.js';
 
 const NAV = [
   { to: '/dashboard', label: 'Overview', icon: LayoutDashboard },
+  { to: '/organizations', label: 'Organizations', icon: Building2 },
   { to: '/users', label: 'User Management', icon: Users },
   { to: '/analytics', label: 'Social Analytics', icon: BarChart3 },
+  { to: '/calendar', label: 'Posting Calendar', icon: CalendarDays },
   { to: '/activity', label: 'Activity Logs', icon: Activity },
   { to: '/settings', label: 'Settings', icon: Settings },
 ];

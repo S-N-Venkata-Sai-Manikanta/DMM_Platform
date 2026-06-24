@@ -12,6 +12,12 @@ const api = axios.create({
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem(TOKEN_KEY);
   if (token) config.headers.Authorization = `Bearer ${token}`;
+  // Attach the admin's currently-selected organization for org-scoped endpoints,
+  // unless the call already specifies one explicitly.
+  const orgId = localStorage.getItem('dmm_admin_selected_org');
+  if (orgId && !config.params?.organizationId) {
+    config.headers['x-organization-id'] = orgId;
+  }
   return config;
 });
 

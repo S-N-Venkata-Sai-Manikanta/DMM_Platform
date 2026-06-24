@@ -1,9 +1,9 @@
 import { NavLink } from 'react-router-dom';
 import {
-  LayoutDashboard, FileImage, Images, CheckSquare, BarChart3,
-  FileText, Bell, Settings, X,
+  LayoutDashboard, FileImage, Images, CheckSquare, BarChart3, CalendarDays,
+  FileText, Bell, Settings, X, TrendingUp,
 } from 'lucide-react';
-import { cn } from '../../lib/utils.js';
+import { cn, initials } from '../../lib/utils.js';
 import { useAuthStore } from '../../store/authStore.js';
 
 const MAIN_NAV = [
@@ -11,6 +11,8 @@ const MAIN_NAV = [
   { to: '/templates', label: 'Templates', icon: FileImage },
   { to: '/assets', label: 'Assets', icon: Images },
   { to: '/approvals', label: 'Approvals', icon: CheckSquare },
+  { to: '/calendar', label: 'Calendar', icon: CalendarDays },
+  { to: '/social-analytics', label: 'Social Analytics', icon: TrendingUp },
   { to: '/approval-analytics', label: 'Approval Analytics', icon: BarChart3 },
   { to: '/reports', label: 'Reports', icon: FileText },
   { to: '/notifications', label: 'Notifications', icon: Bell },
@@ -19,6 +21,7 @@ const MAIN_NAV = [
 
 export default function Sidebar({ open, onClose }) {
   const { user } = useAuthStore();
+  const org = user?.organization;
 
   const linkClass = ({ isActive }) => cn('sidebar-link', isActive && 'sidebar-link-active');
 
@@ -32,13 +35,17 @@ export default function Sidebar({ open, onClose }) {
           open ? 'translate-x-0' : '-translate-x-full'
         )}
       >
-        <div className="flex h-16 items-center justify-between px-6">
-          <div className="flex items-center gap-2.5">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-brand-500 to-brand-700 shadow-glow">
-              <span className="text-lg font-extrabold text-white">M</span>
-            </div>
-            <div>
-              <p className="text-sm font-extrabold leading-tight text-slate-800 dark:text-white">DMM Platform</p>
+        <div className="flex h-16 items-center justify-between px-5">
+          <div className="flex min-w-0 items-center gap-2.5">
+            {org?.logo ? (
+              <img src={org.logo} alt={org.name} className="h-9 w-9 shrink-0 rounded-xl object-cover" />
+            ) : (
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl shadow-glow" style={{ background: org?.color ? `linear-gradient(135deg, ${org.color}, ${org.color}cc)` : undefined }}>
+                <span className="text-sm font-extrabold text-white">{org?.name ? initials(org.name) : 'DMM'}</span>
+              </div>
+            )}
+            <div className="min-w-0">
+              <p className="truncate text-sm font-extrabold leading-tight text-slate-800 dark:text-white">{org?.name || 'DMM Platform'}</p>
               <p className="text-[11px] text-slate-400">Marketing Suite</p>
             </div>
           </div>

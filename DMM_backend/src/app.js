@@ -16,6 +16,8 @@ import reportRoutes from './routes/reportRoutes.js';
 import activityRoutes from './routes/activityRoutes.js';
 import searchRoutes from './routes/searchRoutes.js';
 import analyticsRoutes from './routes/analyticsRoutes.js';
+import organizationRoutes from './routes/organizationRoutes.js';
+import calendarRoutes from './routes/calendarRoutes.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -59,6 +61,8 @@ app.use('/api/reports', reportRoutes);
 app.use('/api/activity', activityRoutes);
 app.use('/api/search', searchRoutes);
 app.use('/api/analytics', analyticsRoutes);
+app.use('/api/organizations', organizationRoutes);
+app.use('/api/calendar', calendarRoutes);
 
 app.use(notFound);
 app.use(errorHandler);

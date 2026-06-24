@@ -3,6 +3,7 @@ import { TEMPLATE_CATEGORIES } from '../config/constants.js';
 
 const templateSchema = new mongoose.Schema(
   {
+    organization: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization', required: true, index: true },
     name: { type: String, required: true, trim: true },
     description: { type: String, default: '' },
     category: { type: String, enum: TEMPLATE_CATEGORIES, required: true },

@@ -2,14 +2,15 @@ import asyncHandler from 'express-async-handler';
 import Template from '../models/Template.js';
 import { uploadBuffer, deleteFile } from '../config/storage.js';
 import { logActivity } from '../utils/logActivity.js';
+import { requireOrgId } from '../utils/org.js';
 import { ACTIVITY_ACTIONS } from '../config/constants.js';
 
 const extOf = (name = '') => (name.split('.').pop() || '').toUpperCase();
 
-// @route GET /api/templates  — search + filter + paginate
+// @route GET /api/templates  — search + filter + paginate (org-scoped)
 export const getTemplates = asyncHandler(async (req, res) => {
   const { search, category, page = 1, limit = 12 } = req.query;
-  const query = {};
+  const query = { organization: requireOrgId(req, res) };
   if (category && category !== 'All') query.category = category;
   if (search) query.$or = [
     { name: { $regex: search, $options: 'i' } },
@@ -33,6 +34,7 @@ export const getTemplate = asyncHandler(async (req, res) => {
 
 // @route POST /api/templates
 export const createTemplate = asyncHandler(async (req, res) => {
+  const orgId = requireOrgId(req, res);
   const { name, description, category } = req.body;
   if (!name || !category) { res.status(400); throw new Error('Name and category are required'); }
   if (!req.files?.file?.[0]) { res.status(400); throw new Error('Template file is required'); }
@@ -50,20 +52,21 @@ export const createTemplate = asyncHandler(async (req, res) => {
   }
 
   const tpl = await Template.create({
+    organization: orgId,
     name, description, category,
     fileUrl: url, filePublicId: publicId, fileName: file.originalname,
     fileType: extOf(file.originalname), fileSize: file.size,
     thumbnail, thumbnailPublicId,
     uploadedBy: req.user._id,
   });
-  logActivity({ user: req.user._id, action: ACTIVITY_ACTIONS.TEMPLATE_UPLOAD, description: `Uploaded template "${name}"`, entityType: 'Template', entityId: tpl._id });
+  logActivity({ user: req.user._id, organization: orgId, action: ACTIVITY_ACTIONS.TEMPLATE_UPLOAD, description: `Uploaded template "${name}"`, entityType: 'Template', entityId: tpl._id });
   res.status(201).json({ success: true, template: tpl });
 });
 
 // @route PUT /api/templates/:id
 export const updateTemplate = asyncHandler(async (req, res) => {
   const tpl = await Template.findById(req.params.id);
-  if (!tpl) { res.status(404); throw new Error('Template not found'); }
+  if (!tpl || String(tpl.organization) !== String(requireOrgId(req, res))) { res.status(404); throw new Error('Template not found'); }
   // Only owner or CEO can edit
   if (String(tpl.uploadedBy) !== String(req.user._id) && req.user.role !== 'CEO') {
     res.status(403); throw new Error('Not allowed to edit this template');
@@ -93,7 +96,7 @@ export const updateTemplate = asyncHandler(async (req, res) => {
 // @route DELETE /api/templates/:id
 export const deleteTemplate = asyncHandler(async (req, res) => {
   const tpl = await Template.findById(req.params.id);
-  if (!tpl) { res.status(404); throw new Error('Template not found'); }
+  if (!tpl || String(tpl.organization) !== String(requireOrgId(req, res))) { res.status(404); throw new Error('Template not found'); }
   if (String(tpl.uploadedBy) !== String(req.user._id) && req.user.role !== 'CEO') {
     res.status(403); throw new Error('Not allowed to delete this template');
   }

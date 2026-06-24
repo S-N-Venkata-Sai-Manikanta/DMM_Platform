@@ -1,9 +1,16 @@
 # DMM Platform — Digital Marketing Management Platform
 
-An enterprise-grade, full-stack MERN platform for managing all digital marketing
-operations of a college or organization: social media analytics, a structured
-content approval workflow, template & asset repositories, reporting, notifications
-and activity logging — with role-based access for **Admin**, **CEO** and **User**.
+An enterprise-grade, full-stack **multi-organization** MERN platform for managing
+all digital marketing operations: social media analytics, a structured content
+approval workflow, a posting calendar, template & asset repositories, reporting,
+notifications and activity logging — with role-based access for **Admin**, **CEO**
+and **User**.
+
+**Multi-tenant by design:** the Admin creates organizations (e.g. NCT, NCMS), and
+every CEO/User belongs to exactly one. All data — approvals, templates, assets,
+analytics, calendar, reports — is fully isolated per organization. Creating an
+organization instantly provisions the entire platform for it; there is no code to
+duplicate per org.
 
 > Design inspired by HubSpot, Buffer, Hootsuite, ClickUp, Monday.com and Meta Business Suite.
 
@@ -126,19 +133,49 @@ the password from **Settings → Password** after first login.
 If the database has **no users at all**, the Admin console shows a one-time
 **"Set up the platform"** screen to create the first admin interactively.
 
-**Then:** as admin, go to **User Management** to add your CEO and team members, and
-**Social Analytics** to enter each platform's metrics (these power the product
-dashboard). Those users sign in to the **product app → http://localhost:5173**.
-(The product app shows a "platform not configured" screen until the first admin
-exists.)
+**Then, as admin:**
+1. **Organizations** → create an organization (e.g. NCT, NCMS) — name, logo, brand color.
+2. **User Management** → add CEO/User accounts and assign each to an organization.
+3. **Social Analytics** → pick an organization and enter its platform metrics.
+4. **Posting Calendar** → pick an organization to see its posts day-by-day.
+
+Those CEO/User accounts then sign in to the **product app → http://localhost:5173**,
+where everything is automatically scoped to their organization (its name, logo and
+color brand the app). The product app shows a "platform not configured" screen
+until the first admin exists.
+
+### 🏢 Multi-organization model
+
+| Concept | Behaviour |
+|---------|-----------|
+| **Organization** | An isolated workspace. Created/managed by the Admin. |
+| **Data isolation** | Approvals, templates, assets, analytics, calendar, reports, notifications and activity are all scoped to one org. A CEO of NCT never sees NCMS data. |
+| **Admin** | Global — not tied to an org. Creates orgs, assigns users, enters per-org analytics, views the per-org calendar. |
+| **Calendar** | A month grid of posted content. Click a day to see exactly what was posted, by platform. Available in the product app (the user's org) and the admin console (per selected org). |
+
+### 📈 Social analytics (LinkedIn-style)
+
+Metrics are entered **weekly** per organization & platform (admin console → Social
+Analytics → *Enter metrics*). Each save is a dated snapshot, so the platform tracks
+**week-over-week change** automatically. The report view shows:
+
+- **Highlight cards** with up/down deltas vs the previous entry (e.g. *+180 followers, +18%*)
+- **Charts** — audience growth (area) and a selectable weekly metric (bar)
+- **Sectioned metrics** grouped LinkedIn-style: **Followers** (total / new / last-30-days),
+  **Discovery** (impressions, search appearances, engagement rate), **Content**
+  (reactions, comments, reposts), **Visitors** (page views, unique visitors)
+- **Compare organizations** — rank all orgs on any metric for a platform (admin only)
+
+CEOs/Users see their own organization's report (read-only) at **Social Analytics**
+in the product app; the admin enters the numbers and can compare across orgs.
 
 ### 👥 Roles
 
-| Role | Signs in to | Capabilities |
-|------|-------------|--------------|
-| **ADMIN** | Admin console (5174) | Manage all users (create/edit/deactivate/delete, assign roles, reset passwords), enter social analytics, view activity logs & system overview |
-| **CEO** | Product app (5173) | Approve/reject content with feedback, org-wide dashboards & reports |
-| **USER** | Product app (5173) | Create approval requests, upload templates/assets, mark content posted, manage own content |
+| Role | Signs in to | Scope | Capabilities |
+|------|-------------|-------|--------------|
+| **ADMIN** | Admin console (5174) | Global | Manage organizations; manage all users (create/edit/deactivate/delete, assign roles + orgs, reset passwords); enter per-org analytics; per-org posting calendar; system activity logs & overview |
+| **CEO** | Product app (5173) | One org | Approve/reject content with feedback; org dashboards, calendar & reports |
+| **USER** | Product app (5173) | One org | Create approval requests, upload templates/assets, mark content posted, manage own content |
 
 > The admin console only accepts ADMIN accounts — a CEO/User who tries to sign in
 > there is rejected. The product app is for day-to-day marketing work.
@@ -211,14 +248,24 @@ POST   /api/auth/login                 # authenticate
 POST   /api/auth/forgot-password       # email a reset link (if SMTP configured)
 POST   /api/auth/reset-password/:token # set a new password
 
-GET    /api/users                      # ADMIN: list users (search, role filter)
-POST   /api/users                      # ADMIN: create user
-PUT    /api/users/:id                  # ADMIN: update role/status/details
+GET    /api/organizations             # ADMIN: list orgs (with member/post counts)
+POST   /api/organizations             # ADMIN: create org (name, logo, color)
+PUT    /api/organizations/:id         # ADMIN: update org
+DELETE /api/organizations/:id         # ADMIN: delete org (only if no members)
+
+GET    /api/users                      # ADMIN: list users (search, role, organization filter)
+POST   /api/users                      # ADMIN: create user (+organization for CEO/USER)
+PUT    /api/users/:id                  # ADMIN: update role/status/organization/details
 PUT    /api/users/:id/reset-password   # ADMIN: reset a user's password
 DELETE /api/users/:id                  # ADMIN: delete user
 
-GET    /api/analytics                  # latest social metrics per platform
-POST   /api/analytics                  # ADMIN/CEO: record new metrics snapshot
+GET    /api/analytics?organizationId=  # latest social metrics per platform (org-scoped)
+POST   /api/analytics                  # ADMIN/CEO: record a weekly metrics snapshot
+GET    /api/analytics/:platform/report # rich report: latest + previous + WoW deltas + time series
+GET    /api/analytics/compare?platform=&metric=   # ADMIN: compare a metric across organizations
+
+GET    /api/calendar?month=YYYY-MM     # posted-content counts per day (org-scoped)
+GET    /api/calendar/day?date=…        # the posts published on a specific day
 
 GET    /api/dashboard/stats            # overall + social stats (org-wide for ADMIN/CEO)
 GET    /api/dashboard/charts           # chart series
